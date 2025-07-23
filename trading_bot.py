@@ -1,3 +1,4 @@
+import patch_pandas_ta
 import os
 import time
 import requests
