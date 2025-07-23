@@ -1,0 +1,6 @@
+pandas
+pandas_ta
+requests
+python-dotenv
+supabase
+schedule
