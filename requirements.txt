@@ -1,6 +1,7 @@
-pandas
-pandas_ta
-requests
-python-dotenv
-supabase
-schedule
+pandas==2.0.3
+pandas_ta==0.3.13  # Sử dụng phiên bản cũ hơn, ổn định hơn
+requests==2.31.0
+python-dotenv==1.0.0
+supabase==1.1.1
+schedule==1.2.0
+numpy==1.24.3  # Cố định phiên bản numpy
