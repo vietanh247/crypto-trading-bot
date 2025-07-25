@@ -319,6 +319,10 @@ if __name__ == "__main__":
         exit(1)
     
     # Chạy phân tích thị trường
-    analyze_market()
+    try:
+        analyze_market()
+    except Exception as e:
+        logger.error(f"Unhandled exception in main: {str(e)}", exc_info=True)
+        send_telegram_alert(f"⚠️ CRITICAL ERROR: {str(e)}")
     
     logger.info("====== BOT FINISHED ======")

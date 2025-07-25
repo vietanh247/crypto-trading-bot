@@ -25,7 +25,10 @@ jobs:
         pip install --no-cache-dir -r requirements.txt
         
     - name: Update top coins
-      run: python update_coins.py
+      run: |
+            python trading_bot.py || echo "Bot exited with error"
+            echo "=== DEBUG LOG ==="
+            cat bot_debug.log
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
