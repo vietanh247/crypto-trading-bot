@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 
 # Cấu hình logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+log_format = '%(asctime)s - %(levelname)s - %(message)s'
 logging.basicConfig(
     level=logging.INFO,  # Đổi thành logging.DEBUG để xem chi tiết
     format=log_format,
