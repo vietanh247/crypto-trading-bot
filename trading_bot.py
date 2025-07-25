@@ -75,28 +75,77 @@ def test_telegram_connection():
         return False
 
 # ======= HÀM LẤY DỮ LIỆU TỪ BINANCE ========
-def fetch_coingecko_data(coin_id, interval='4h', limit=100):
-    # Map interval to days
-    interval_map = {'1h': 1, '4h': 4, '1d': 30}
-    days = interval_map.get(interval, 30)
+def fetch_crypto_data(symbol, interval='1h', limit=100):
+    urls = [
+        "https://api.binance.com/api/v3/klines",
+        "https://api1.binance.com/api/v3/klines",
+        "https://api2.binance.com/api/v3/klines",
+        "https://api3.binance.com/api/v3/klines"
+    ]
     
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
     params = {
-        'vs_currency': 'usd',
-        'days': days
+        'symbol': symbol,
+        'interval': interval,
+        'limit': limit
     }
     
-    try:
-        response = requests.get(url, params=params, timeout=15)
-        data = response.json()
-        
-        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df['volume'] = 0  # Placeholder
-        return df
-    except Exception as e:
-        logger.error(f"CoinGecko API failed: {str(e)}")
-        return None
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json',
+        'X-MBX-APIKEY': ''  # Thêm nếu cần
+    }
+    
+    for i, base_url in enumerate(urls):
+        try:
+            response = requests.get(
+                base_url,
+                params=params,
+                headers=headers,
+                timeout=15
+            )
+            
+            # Kiểm tra status code
+            if response.status_code != 200:
+                logger.warning(f"Attempt {i+1}: Status code {response.status_code} from {base_url}")
+                continue
+                
+            # Kiểm tra nội dung response
+            content = response.text.strip()
+            if not content:
+                logger.warning(f"Attempt {i+1}: Empty response from {base_url}")
+                continue
+                
+            # Kiểm tra xem có phải là JSON không
+            if content[0] not in ['[', '{']:
+                logger.warning(f"Attempt {i+1}: Invalid JSON start from {base_url}. Content: {content[:100]}...")
+                continue
+                
+            data = response.json()
+            
+            # Kiểm tra cấu trúc dữ liệu
+            if not isinstance(data, list) or len(data) == 0 or not isinstance(data[0], list):
+                logger.warning(f"Attempt {i+1}: Invalid data structure from {base_url}")
+                continue
+                
+            # Xử lý dữ liệu thành công
+            df = pd.DataFrame(data, columns=[
+                'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_volume', 'trades', 
+                'taker_buy_base', 'taker_buy_quote', 'ignore'
+            ])
+            
+            numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+            df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            
+            logger.info(f"Fetched {len(df)} records for {symbol} ({interval}) from {base_url}")
+            return df
+            
+        except Exception as e:
+            logger.warning(f"Attempt {i+1} failed for {base_url}: {str(e)}")
+    
+    logger.error(f"All endpoints failed for {symbol}")
+    return None
         
 # ======= HÀM LẤY TÍN HIỆU ICHIMOKU TỪ CLOUDFLARE WORKER ========
 def get_ichimoku_signal(high, low, close):
