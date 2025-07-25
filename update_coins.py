@@ -7,17 +7,7 @@ import sys
 from datetime import datetime
 
 # Cấu hình logging
-log_format = '%(asctime)s - %(levelname)s - %(message)s'
-logging.basicConfig(
-    level=logging.INFO,  # Đổi thành logging.DEBUG để xem chi tiết
-    format=log_format,
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot_debug.log')
-    ]
-)
-logger = logging.getLogger('trading_bot')
-logger.info("====== STARTING TRADING BOT ======")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_top_coins():
     try:
