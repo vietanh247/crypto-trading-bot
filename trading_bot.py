@@ -5,10 +5,15 @@ import requests
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
+import sys
+import pandas_ta
+print(f"pandas_ta version: {pandas_ta.__version__}")
 from dotenv import load_dotenv
 from supabase import create_client
 
 load_dotenv()
+if 'NaN' not in sys.modules:
+    sys.modules['NaN'] = np.nan
 
 # Hàm lấy dữ liệu từ Binance
 def fetch_crypto_data(symbol, interval='1h', limit=500):
