@@ -249,7 +249,7 @@ def analyze_market():
     signal_count = 0
     
     for coin in top_coins:
-        ssymbol = f"{coin}USDT"
+        symbol = f"{coin}USDT"
         logger.info(f"======= ANALYZING {symbol} =======")
         
         try:
