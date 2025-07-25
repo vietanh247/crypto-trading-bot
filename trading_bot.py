@@ -70,8 +70,6 @@ def analyze_market():
     
     for coin in top_coins:
         symbol = f"{coin}USDT"
-        logging.info(f"======= ANALYZING {symbol} =======")
-        print(f"Analyzing {symbol}...")
         
         try:
             df_4h = fetch_crypto_data(symbol, '4h')
@@ -191,14 +189,5 @@ def analyze_market():
             send_telegram_alert(error_msg)
     
         time.sleep(5)  # Chờ giữa các coin
-    report = f"""
-📊 **Analysis Report** 
-⏰ {datetime.now().strftime("%Y-%m-%d %H:%M UTC")}
-🪙 Coins analyzed: {len(top_coins)}
-🚀 Signals generated: {signal_count}
-📈 Market conditions: {'Bullish' if signal_count > 0 else 'Neutral/Bearish'}
-"""
-    send_telegram_alert(report)
-    logging.info(report)
 if __name__ == "__main__":
     analyze_market()
