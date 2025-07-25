@@ -52,7 +52,16 @@ def send_telegram_alert(message):
     
     response = requests.post(url, json=payload)
     return response.json()
-
+def test_telegram_connection():
+    """Kiểm tra kết nối đến Telegram"""
+    test_msg = "🔔 Bot connection test successful! Time: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        response = send_telegram_alert(test_msg)
+        logging.info(f"Telegram test response: {response.status_code}")
+        return True
+    except Exception as e:
+        logging.error(f"Telegram connection failed: {str(e)}")
+        return False
 # Hàm phân tích chính
 def analyze_market():
     supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
@@ -61,10 +70,17 @@ def analyze_market():
     
     for coin in top_coins:
         symbol = f"{coin}USDT"
+        logging.info(f"======= ANALYZING {symbol} =======")
         print(f"Analyzing {symbol}...")
         
         try:
             df_4h = fetch_crypto_data(symbol, '4h')
+            if df_4h is None or len(df_4h) < 100:
+                logging.warning(f"Skipping {symbol}: insufficient data ({len(df_4h) if df_4h else 0} records)")
+                continue
+                
+            logging.info(f"Data range: {df_4h['timestamp'].iloc[0]} to {df_4h['timestamp'].iloc[-1]}")
+            logging.info(f"Latest close: {df_4h['close'].iloc[-1]}")
             
             # Kiểm tra dữ liệu đủ
             if len(df_4h) < 100:
@@ -89,6 +105,11 @@ def analyze_market():
             df_4h.ta.ema(length=200, append=True)
             df_4h.ta.adx(length=14, append=True)
             
+            logging.debug(f"RSI values: {df_4h['rsi'].tail().values}")
+            logging.debug(f"MACD: {df_4h['macd'].iloc[-1]}, Signal: {df_4h['macd_signal'].iloc[-1]}")
+            logging.debug(f"EMA 21: {df_4h['ema21'].iloc[-1]}, EMA 50: {df_4h['ema50'].iloc[-1]}")
+            logging.debug(f"ADX: {df_4h['adx'].iloc[-1]}")
+
             # Xác định tín hiệu
             signals = []
             
@@ -117,7 +138,9 @@ def analyze_market():
                 signals.append("Ichimoku tăng")
                 
             # Kiểm tra điều kiện giao dịch
+            logging.info(f"Signals detected: {signals}")
             if len(signals) >= 4 and df_4h['ADX_14'].iloc[-1] > 20:
+                logging.info("✅ Conditions met! Generating signal...")
                 current_price = df_4h['close'].iloc[-1]
                 atr = ta.atr(df_4h['high'], df_4h['low'], df_4h['close'], length=14).iloc[-1]
                 
@@ -157,11 +180,25 @@ def analyze_market():
 """
                 send_telegram_alert(message)
                 print(f"Signal sent for {symbol}")
+                signal_count += 1
+            else:
+                # ===== THÊM LOGGING LÝ DO KHÔNG TẠO TÍN HIỆU =====
+                logging.info(f"❌ Conditions not met. Signals: {len(signals)}, ADX: {df_4h['adx'].iloc[-1]}")
                 
         except Exception as e:
-            print(f"Error analyzing {symbol}: {str(e)}")
-            
+            error_msg = f"⚠️ Error processing {symbol}: {str(e)}"
+            logging.error(error_msg, exc_info=True)
+            send_telegram_alert(error_msg)
+    
         time.sleep(5)  # Chờ giữa các coin
-
+    report = f"""
+📊 **Analysis Report** 
+⏰ {datetime.now().strftime("%Y-%m-%d %H:%M UTC")}
+🪙 Coins analyzed: {len(top_coins)}
+🚀 Signals generated: {signal_count}
+📈 Market conditions: {'Bullish' if signal_count > 0 else 'Neutral/Bearish'}
+"""
+    send_telegram_alert(report)
+    logging.info(report)
 if __name__ == "__main__":
     analyze_market()
