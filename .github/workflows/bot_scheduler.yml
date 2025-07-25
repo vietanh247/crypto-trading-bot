@@ -31,7 +31,7 @@ jobs:
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         
     - name: Run trading analysis
-      run: python trading_bot.py > output.log 2>&1
+      run: python trading_bot.py
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
