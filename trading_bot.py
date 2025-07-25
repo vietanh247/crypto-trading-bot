@@ -74,85 +74,70 @@ def test_telegram_connection():
         logger.error(f"Telegram connection failed: {str(e)}")
         return False
 
-# ======= HÀM LẤY DỮ LIỆU TỪ BINANCE ========
-def fetch_crypto_data(symbol, interval='1h', limit=100):
-    urls = [
-        "https://api.binance.com/api/v3/klines",
-        "https://api1.binance.com/api/v3/klines",
-        "https://api2.binance.com/api/v3/klines",
-        "https://api3.binance.com/api/v3/klines"
-    ]
+# ======= HÀM LẤY DỮ LIỆU TỪ BYBIT ========
+def fetch_crypto_data(symbol, interval='4h', limit=200):
+    """Lấy dữ liệu giá từ Bybit API"""
+    # Bybit không hỗ trợ interval '4h' nên chuyển sang 240 phút
+    bybit_interval = {
+        '1h': '60',
+        '4h': '240',
+        '1d': 'D'
+    }.get(interval, '240')
     
+    url = "https://api.bybit.com/v5/market/kline"
     params = {
+        'category': 'linear',
         'symbol': symbol,
-        'interval': interval,
+        'interval': bybit_interval,
         'limit': limit
     }
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'application/json',
-        'X-MBX-APIKEY': ''  # Thêm nếu cần
-    }
-    
-    for i, base_url in enumerate(urls):
-        try:
-            response = requests.get(
-                base_url,
-                params=params,
-                headers=headers,
-                timeout=15
-            )
-            
-            # Kiểm tra status code
-            if response.status_code != 200:
-                logger.warning(f"Attempt {i+1}: Status code {response.status_code} from {base_url}")
-                continue
-                
-            # Kiểm tra nội dung response
-            content = response.text.strip()
-            if not content:
-                logger.warning(f"Attempt {i+1}: Empty response from {base_url}")
-                continue
-                
-            # Kiểm tra xem có phải là JSON không
-            if content[0] not in ['[', '{']:
-                logger.warning(f"Attempt {i+1}: Invalid JSON start from {base_url}. Content: {content[:100]}...")
-                continue
-                
-            data = response.json()
-            
-            # Kiểm tra cấu trúc dữ liệu
-            if not isinstance(data, list) or len(data) == 0 or not isinstance(data[0], list):
-                logger.warning(f"Attempt {i+1}: Invalid data structure from {base_url}")
-                continue
-                
-            # Xử lý dữ liệu thành công
-            df = pd.DataFrame(data, columns=[
-                'timestamp', 'open', 'high', 'low', 'close', 'volume',
-                'close_time', 'quote_volume', 'trades', 
-                'taker_buy_base', 'taker_buy_quote', 'ignore'
-            ])
-            
-            numeric_cols = ['open', 'high', 'low', 'close', 'volume']
-            df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            
-            logger.info(f"Fetched {len(df)} records for {symbol} ({interval}) from {base_url}")
-            return df
-            
-        except Exception as e:
-            logger.warning(f"Attempt {i+1} failed for {base_url}: {str(e)}")
-    
-    logger.error(f"All endpoints failed for {symbol}")
-    return None
+    try:
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
         
+        # Kiểm tra mã lỗi
+        if data.get('retCode') != 0:
+            logger.error(f"Bybit API error: {data.get('retMsg', 'Unknown error')}")
+            return None
+            
+        # Lấy danh sách nến
+        klines = data['result']['list']
+        if not klines:
+            logger.error("Empty data from Bybit API")
+            return None
+            
+        # Tạo DataFrame
+        df = pd.DataFrame(klines, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume', 
+            'turnover'
+        ])
+        
+        # Sắp xếp theo thời gian tăng dần
+        df = df.iloc[::-1].reset_index(drop=True)
+        
+        # Chuyển đổi kiểu dữ liệu
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
+        df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='ms')
+        
+        logger.info(f"Fetched {len(df)} records for {symbol} ({interval}) from Bybit")
+        return df
+    except Exception as e:
+        logger.error(f"Failed to fetch data from Bybit: {str(e)}")
+        return None
+
 # ======= HÀM LẤY TÍN HIỆU ICHIMOKU TỪ CLOUDFLARE WORKER ========
 def get_ichimoku_signal(high, low, close):
     worker_url = os.getenv("CLOUDFLARE_WORKER_URL")
-    
     if not worker_url:
         logger.error("Cloudflare Worker URL not configured")
+        return None
+    
+    # Kiểm tra dữ liệu đầu vào
+    if not high or not low or not close or len(high) < 52:
+        logger.error("Insufficient data for Ichimoku")
         return None
     
     data = {
@@ -363,6 +348,13 @@ if __name__ == "__main__":
     # Kiểm tra kết nối Telegram
     if not test_telegram_connection():
         logger.error("Critical: Telegram connection failed. Exiting.")
+        exit(1)
+    
+    # Test kết nối Bybit API
+    test_df = fetch_crypto_data("BTCUSDT", "4h", 10)
+    if test_df is None or len(test_df) == 0:
+        logger.error("Critical: Bybit API connection failed. Exiting.")
+        send_telegram_alert("⚠️ CRITICAL: Failed to connect to Bybit API")
         exit(1)
     
     # Chạy phân tích thị trường
