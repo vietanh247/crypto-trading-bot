@@ -398,13 +398,6 @@ if __name__ == "__main__":
         logger.error("Critical: Telegram connection failed. Exiting.")
         exit(1)
     
-    # Test kết nối Bybit API
-    test_df = fetch_crypto_data("BTCUSDT", "4h", 10)
-    if test_df is None or len(test_df) == 0:
-        logger.error("Critical: Bybit API connection failed. Exiting.")
-        send_telegram_alert("⚠️ CRITICAL: Failed to connect to Bybit API")
-        exit(1)
-    
     # Chạy phân tích thị trường
     try:
         analyze_market()
