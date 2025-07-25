@@ -31,14 +31,7 @@ jobs:
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         
     - name: Run trading analysis
-      run: |
-        echo "Start time: $(date)"
-        python trading_bot.py > output.log 2>&1
-        echo "=== BOT OUTPUT ==="
-        cat output.log
-        echo "=== DEBUG LOG ==="
-        cat bot_debug.log
-        echo "End time: $(date)"
+      run: python trading_bot.py > output.log 2>&1
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
