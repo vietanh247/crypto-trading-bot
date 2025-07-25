@@ -76,12 +76,10 @@ def test_telegram_connection():
 
 # ======= HÀM LẤY DỮ LIỆU TỪ BINANCE ========
 def fetch_crypto_data(symbol, interval='1h', limit=100):
-    # Chuyển sang sử dụng Bybit API
+    # Sử dụng Bybit API
     url = "https://api.bybit.com/v5/market/kline"
-    
-    # Bybit sử dụng quy ước ký hiệu khác: BTCUSDT → BTCUSDT
     params = {
-        'category': 'linear',
+        'category': 'spot',
         'symbol': symbol,
         'interval': interval,
         'limit': limit
@@ -92,18 +90,19 @@ def fetch_crypto_data(symbol, interval='1h', limit=100):
         data = response.json()
         
         if data['retCode'] != 0:
-            logger.error(f"Bybit API error: {data['retMsg']}")
+            logger.error(f"Bybit error: {data['retMsg']}")
             return None
             
         klines = data['result']['list']
         df = pd.DataFrame(klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'turnover'
+            'timestamp', 'open', 'high', 'low', 'close', 'volume'
         ])
-        logger.info(f"Fetched {len(df)} records for {symbol} ({interval})")
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
         return df
     except Exception as e:
-        logger.error(f"Failed to fetch data for {symbol}: {str(e)}")
+        logger.error(f"Bybit API failed: {str(e)}")
         return None
         
 # ======= HÀM LẤY TÍN HIỆU ICHIMOKU TỪ CLOUDFLARE WORKER ========
