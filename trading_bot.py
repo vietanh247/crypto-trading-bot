@@ -73,12 +73,7 @@ def analyze_market():
         
         try:
             df_4h = fetch_crypto_data(symbol, '4h')
-            if df_4h is None or len(df_4h) < 100:
-                logging.warning(f"Skipping {symbol}: insufficient data ({len(df_4h) if df_4h else 0} records)")
-            continue
-            
-                logging.info(f"Data range: {df_4h['timestamp'].iloc[0]} to {df_4h['timestamp'].iloc[-1]}")
-                logging.info(f"Latest close: {df_4h['close'].iloc[-1]}")
+           
             # Kiểm tra dữ liệu đủ
             if len(df_4h) < 100:
                 continue
