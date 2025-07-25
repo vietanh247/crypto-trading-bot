@@ -75,54 +75,32 @@ def test_telegram_connection():
         return False
 
 # ======= HÀM LẤY DỮ LIỆU TỪ BINANCE ========
-def fetch_crypto_data(symbol, interval='1h', limit=100):  # Giảm limit
-    # Sử dụng endpoint dự phòng
-    url = "https://api1.binance.com/api/v3/klines"
+def fetch_crypto_data(symbol, interval='1h', limit=100):
+    # Chuyển sang sử dụng Bybit API
+    url = "https://api.bybit.com/v5/market/kline"
     
+    # Bybit sử dụng quy ước ký hiệu khác: BTCUSDT → BTCUSDT
     params = {
+        'category': 'linear',
         'symbol': symbol,
         'interval': interval,
         'limit': limit
     }
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'application/json'
-    }
-    
-    proxy_url = os.getenv("PROXY_URL")
-    proxies = {
-        'http': proxy_url,
-        'https': proxy_url
-    } if proxy_url else None
-    
     try:
-        response = requests.get(
-            url, 
-            params=params, 
-            headers=headers, 
-            proxies=proxies,
-            timeout=20
-        )
-        response.raise_for_status()
+        response = requests.get(url, params=params, timeout=15)
         data = response.json()
         
-        df = pd.DataFrame(data, columns=[
+        if data['retCode'] != 0:
+            logger.error(f"Bybit API error: {data['retMsg']}")
+            return None
+            
+        klines = data['result']['list']
+        df = pd.DataFrame(klines, columns=[
             'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'quote_volume', 'trades', 
-            'taker_buy_base', 'taker_buy_quote', 'ignore'
+            'turnover'
         ])
         
-        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
-        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        
-        logger.info(f"Fetched {len(df)} records for {symbol} ({interval})")
-        return df
-    except Exception as e:
-        logger.error(f"Failed to fetch data for {symbol}: {str(e)}")
-        return None
-
 # ======= HÀM LẤY TÍN HIỆU ICHIMOKU TỪ CLOUDFLARE WORKER ========
 def get_ichimoku_signal(high, low, close):
     worker_url = os.getenv("CLOUDFLARE_WORKER_URL")
