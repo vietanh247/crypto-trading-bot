@@ -104,6 +104,31 @@ def fetch_crypto_data(symbol, interval='1h', limit=500):
         logger.error(f"Failed to fetch data for {symbol}: {str(e)}")
         return None
 
+# ======= HÀM LẤY TÍN HIỆU ICHIMOKU TỪ CLOUDFLARE WORKER ========
+def get_ichimoku_signal(high, low, close):
+    worker_url = os.getenv("CLOUDFLARE_WORKER_URL")
+    if not worker_url:
+        logger.error("Cloudflare Worker URL not configured")
+        return None
+    
+    data = {
+        "high": high[-100:],  # Chỉ gửi 100 nến gần nhất
+        "low": low[-100:],
+        "close": close[-100:]
+    }
+    
+    try:
+        response = requests.post(
+            worker_url, 
+            json=data,
+            timeout=10  # Timeout sau 10 giây
+        )
+        response.raise_for_status()
+        return response.json().get("signal")
+    except Exception as e:
+        logger.error(f"Failed to get Ichimoku signal: {str(e)}")
+        return None
+
 # ======= HÀM PHÂN TÍCH CHÍNH ========
 def analyze_market():
     # ======= TEST MODE - GỬI TÍN HIỆU THỬ ========
@@ -175,11 +200,19 @@ def analyze_market():
             # ADX
             df_4h.ta.adx(length=14, append=True)
             
+            # Ichimoku Cloud
+            ichimoku_signal = get_ichimoku_signal(
+                df_4h['high'].tolist(),
+                df_4h['low'].tolist(),
+                df_4h['close'].tolist()
+            )
+            
             # ======= LOG CHỈ BÁO ========
             logger.debug(f"RSI: {current_rsi:.2f}")
             logger.debug(f"MACD: {df_4h['MACD_12_26_9'].iloc[-1]:.4f}, Signal: {df_4h['MACDs_12_26_9'].iloc[-1]:.4f}")
             logger.debug(f"EMA 21: {df_4h['EMA_21'].iloc[-1]:.2f}, EMA 50: {df_4h['EMA_50'].iloc[-1]:.2f}, EMA 200: {df_4h['EMA_200'].iloc[-1]:.2f}")
             logger.debug(f"ADX: {df_4h['ADX_14'].iloc[-1]:.2f}")
+            logger.debug(f"Ichimoku signal: {ichimoku_signal}")
             
             # ======= XÁC ĐỊNH TÍN HIỆU ========
             signals = []
@@ -203,13 +236,15 @@ def analyze_market():
             if df_4h['ADX_14'].iloc[-1] > 25:
                 signals.append("Xu hướng mạnh (ADX>25)")
                 
-            # Ichimoku (tạm bỏ qua để giảm phức tạp)
-            # signals.append("Ichimoku tăng (TEST)")
+            # Ichimoku
+            if ichimoku_signal in ['STRONG_BULLISH', 'BULLISH']:
+                signals.append("Ichimoku tăng")
             
             # ======= KIỂM TRA ĐIỀU KIỆN GIAO DỊCH ========
-            logger.info(f"Signals detected: {signals}")
+            logger.info(f"Signals detected: {signals} ({len(signals)} signals)")
             
-            if len(signals) >= 3 and df_4h['ADX_14'].iloc[-1] > 20:  # Giảm ngưỡng để test
+            # Yêu cầu 4 chỉ báo đồng thuận và ADX > 20
+            if len(signals) >= 4 and df_4h['ADX_14'].iloc[-1] > 20:
                 logger.info("✅ Conditions met! Generating signal...")
                 current_price = df_4h['close'].iloc[-1]
                 
@@ -256,7 +291,8 @@ def analyze_market():
                 else:
                     logger.error(f"Failed to send signal for {symbol}")
             else:
-                logger.info(f"❌ Conditions not met. Signals: {len(signals)}, ADX: {df_4h['ADX_14'].iloc[-1]:.2f}")
+                reason = f"Signals: {len(signals)}/{4}, ADX: {df_4h['ADX_14'].iloc[-1]:.2f}/20"
+                logger.info(f"❌ Conditions not met ({reason})")
                 
         except Exception as e:
             error_msg = f"⚠️ Error processing {symbol}: {str(e)}"
