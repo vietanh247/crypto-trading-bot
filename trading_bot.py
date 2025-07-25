@@ -68,18 +68,36 @@ def fetch_binance_data(symbol, interval='1h', limit=500):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     
-    try:
-        response = requests.get(
-            base_url,
-            params=params,
-            headers=headers,
-            timeout=20
-        )
+    PROXY_LIST = [
+            "http://180.183.157.159:8080",
+            "socks5://46.4.96.137:1080",
+            "socks5://47.91.88.100:1080",
+            "http://154.65.39.7:80",
+            "socks5://82.196.11.105:1080"
+        ]
         
-        # Kiểm tra lỗi
-        if response.status_code != 200:
-            logger.error(f"Binance API error: {response.status_code} - {response.text}")
-            return None
+        for proxy_url in PROXY_LIST:
+            try:
+                proxies = {
+                    'http': proxy_url,
+                    'https': proxy_url
+                }
+                response = requests.get(
+                    base_url,
+                    params=params,
+                    headers=headers,
+                    proxies=proxies,  # THÊM PROXY VÀO ĐÂY
+                    timeout=20
+                )
+                # ... [xử lý response] ...
+                logger.info(f"Thành công với proxy: {proxy_url}")
+                return df
+            except Exception as e:
+                logger.error(f"Lỗi proxy {proxy_url}: {str(e)}")
+                continue
+        
+        logger.error("Tất cả proxy đều thất bại!")
+        return None
             
         data = response.json()
         
