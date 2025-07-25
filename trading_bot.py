@@ -68,63 +68,37 @@ def fetch_binance_data(symbol, interval='1h', limit=500):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     
-    PROXY_LIST = [
-        "http://190.61.88.147:8080",          # Colombia
-        "http://103.155.54.137:83",           # Bangladesh
-        "socks5://138.199.48.1:1080",         # Đức
-        "http://103.153.154.4:80",            # Indonesia
-        "socks5://185.199.229.156:7492",      # Mỹ
-        "http://8.219.97.248:80",             # Singapore
-        "socks5://45.61.139.48:9001",         # Mỹ
-        "http://103.156.17.31:80",            # Indonesia
-        "socks5://45.142.158.100:9050",       # Hà Lan
-        "http://121.156.109.108:8080"         # Hàn Quốc
-    ]
+    try:
+        response = requests.get(
+            base_url,
+            params=params,
+            headers=headers,
+            timeout=20
+        )
         
-    for proxy_url in PROXY_LIST:  # SỬA LỖI: THÊM DẤU HAI CHẤM Ở ĐÂY
-        try:
-            proxies = {
-                'http': proxy_url,
-                'https': proxy_url
-            }
-            logger.info(f"Thử proxy: {proxy_url}")
+        # Kiểm tra lỗi
+        if response.status_code != 200:
+            logger.error(f"Binance API error: {response.status_code} - {response.text}")
+            return None
             
-            response = requests.get(
-                base_url,
-                params=params,
-                headers=headers,
-                proxies=proxies,
-                timeout=15
-            )
-            
-            # Kiểm tra lỗi
-            if response.status_code != 200:
-                logger.warning(f"Proxy {proxy_url} lỗi {response.status_code}")
-                continue  # Thử proxy tiếp theo
-                
-            data = response.json()
-            
-            # Xử lý dữ liệu
-            df = pd.DataFrame(data, columns=[
-                'timestamp', 'open', 'high', 'low', 'close', 'volume',
-                'close_time', 'quote_volume', 'trades', 
-                'taker_buy_base', 'taker_buy_quote', 'ignore'
-            ])
-            
-            numeric_cols = ['open', 'high', 'low', 'close', 'volume']
-            df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            
-            logger.info(f"Lấy dữ liệu thành công qua proxy {proxy_url}")
-            return df
-            
-        except Exception as e:
-            logger.error(f"Lỗi proxy {proxy_url}: {str(e)}")
-            continue  # Tiếp tục thử proxy tiếp theo
-    
-    # Nếu tất cả proxy đều thất bại
-    logger.error("Tất cả proxy đều không hoạt động!")
-    return None
+        data = response.json()
+        
+        # Xử lý dữ liệu
+        df = pd.DataFrame(data, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_volume', 'trades', 
+            'taker_buy_base', 'taker_buy_quote', 'ignore'
+        ])
+        
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        
+        logger.info(f"Fetched {len(df)} records for {symbol} ({interval}) using private API")
+        return df
+    except Exception as e:
+        logger.error(f"Failed to fetch private API data: {str(e)}")
+        return None
 
 # ======= HÀM GỬI TELEGRAM ALERT ========
 def send_telegram_alert(message):
