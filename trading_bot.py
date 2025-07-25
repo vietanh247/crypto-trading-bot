@@ -104,6 +104,9 @@ def fetch_crypto_data(symbol, interval='1h', limit=100):
 # ======= HÀM LẤY TÍN HIỆU ICHIMOKU TỪ CLOUDFLARE WORKER ========
 def get_ichimoku_signal(high, low, close):
     worker_url = os.getenv("CLOUDFLARE_WORKER_URL")
+    if ichimoku_signal is None:
+    logger.warning("Using fallback Ichimoku analysis")
+    
     if not worker_url:
         logger.error("Cloudflare Worker URL not configured")
         return None
