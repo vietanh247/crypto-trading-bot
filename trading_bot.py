@@ -75,34 +75,27 @@ def test_telegram_connection():
         return False
 
 # ======= HÀM LẤY DỮ LIỆU TỪ BINANCE ========
-def fetch_crypto_data(symbol, interval='1h', limit=100):
-    # Sử dụng Bybit API
-    url = "https://api.bybit.com/v5/market/kline"
+def fetch_coingecko_data(coin_id, interval='4h', limit=100):
+    # Map interval to days
+    interval_map = {'1h': 1, '4h': 4, '1d': 30}
+    days = interval_map.get(interval, 30)
+    
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
     params = {
-        'category': 'spot',
-        'symbol': symbol,
-        'interval': interval,
-        'limit': limit
+        'vs_currency': 'usd',
+        'days': days
     }
     
     try:
         response = requests.get(url, params=params, timeout=15)
         data = response.json()
         
-        if data['retCode'] != 0:
-            logger.error(f"Bybit error: {data['retMsg']}")
-            return None
-            
-        klines = data['result']['list']
-        df = pd.DataFrame(klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume'
-        ])
+        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
-        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
+        df['volume'] = 0  # Placeholder
         return df
     except Exception as e:
-        logger.error(f"Bybit API failed: {str(e)}")
+        logger.error(f"CoinGecko API failed: {str(e)}")
         return None
         
 # ======= HÀM LẤY TÍN HIỆU ICHIMOKU TỪ CLOUDFLARE WORKER ========
