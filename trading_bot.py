@@ -33,6 +33,70 @@ if 'NaN' not in sys.modules:
 # Load biến môi trường
 load_dotenv()
 
+# ======= HÀM TẠO CHỮ KÝ BẢO MẬT CHO BINANCE API ========
+def generate_binance_signature(params, secret):
+    query_string = urllib.parse.urlencode(params)
+    return hmac.new(secret.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
+
+# ======= HÀM LẤY DỮ LIỆU TỪ BINANCE VỚI API CÁ NHÂN ========
+def fetch_binance_data(symbol, interval='1h', limit=500):
+    api_key = os.getenv("BINANCE_API_KEY")
+    api_secret = os.getenv("BINANCE_API_SECRET")
+    
+    if not api_key or not api_secret:
+        logger.error("Binance API credentials not configured")
+        return None
+    
+    base_url = "https://api.binance.com/api/v3/klines"
+    
+    # Tham số yêu cầu
+    params = {
+        'symbol': symbol,
+        'interval': interval,
+        'limit': limit,
+        'timestamp': int(time.time() * 1000)
+    }
+    
+    # Tạo chữ ký bảo mật
+    params['signature'] = generate_binance_signature(params, api_secret)
+    
+    headers = {
+        'X-MBX-APIKEY': api_key,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
+    try:
+        response = requests.get(
+            base_url,
+            params=params,
+            headers=headers,
+            timeout=20
+        )
+        
+        # Kiểm tra lỗi
+        if response.status_code != 200:
+            logger.error(f"Binance API error: {response.status_code} - {response.text}")
+            return None
+            
+        data = response.json()
+        
+        # Xử lý dữ liệu
+        df = pd.DataFrame(data, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_volume', 'trades', 
+            'taker_buy_base', 'taker_buy_quote', 'ignore'
+        ])
+        
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        
+        logger.info(f"Fetched {len(df)} records for {symbol} ({interval}) using private API")
+        return df
+    except Exception as e:
+        logger.error(f"Failed to fetch private API data: {str(e)}")
+        return None
+
 # ======= HÀM GỬI TELEGRAM ALERT ========
 def send_telegram_alert(message):
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -75,57 +139,43 @@ def test_telegram_connection():
         return False
 
 # ======= HÀM LẤY DỮ LIỆU TỪ BYBIT ========
-def fetch_crypto_data(symbol, interval='4h', limit=200):
-    """Lấy dữ liệu giá từ Bybit API"""
-    # Bybit không hỗ trợ interval '4h' nên chuyển sang 240 phút
-    bybit_interval = {
-        '1h': '60',
-        '4h': '240',
-        '1d': 'D'
-    }.get(interval, '240')
-    
-    url = "https://api.bybit.com/v5/market/kline"
-    params = {
-        'category': 'linear',
-        'symbol': symbol,
-        'interval': bybit_interval,
-        'limit': limit
-    }
-    
+def fetch_coingecko_data(coin_id, interval='4h'):
     try:
+        # Map coin ID (ví dụ: bitcoin, ethereum)
+        coin_map = {
+            'BTC': 'bitcoin',
+            'ETH': 'ethereum',
+            'BNB': 'binancecoin',
+            # Thêm các coin khác tại đây
+        }
+        
+        coin_id = coin_map.get(coin_id, coin_id.lower())
+        
+        # Map interval
+        interval_map = {'1h': 1, '4h': 4, '1d': 30}
+        days = interval_map.get(interval, 30)
+        
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
+        params = {
+            'vs_currency': 'usd',
+            'days': days
+        }
+        
         response = requests.get(url, params=params, timeout=15)
-        response.raise_for_status()
         data = response.json()
         
-        # Kiểm tra mã lỗi
-        if data.get('retCode') != 0:
-            logger.error(f"Bybit API error: {data.get('retMsg', 'Unknown error')}")
-            return None
-            
-        # Lấy danh sách nến
-        klines = data['result']['list']
-        if not klines:
-            logger.error("Empty data from Bybit API")
-            return None
-            
-        # Tạo DataFrame
-        df = pd.DataFrame(klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume', 
-            'turnover'
-        ])
-        
-        # Sắp xếp theo thời gian tăng dần
-        df = df.iloc[::-1].reset_index(drop=True)
-        
-        # Chuyển đổi kiểu dữ liệu
-        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        numeric_cols = ['open', 'high', 'low', 'close']
         df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
-        df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='ms')
         
-        logger.info(f"Fetched {len(df)} records for {symbol} ({interval}) from Bybit")
+        # Thêm cột volume giả định
+        df['volume'] = df['close'].rolling(5).mean().fillna(0)
+        
+        logger.info(f"Fetched {len(df)} records from CoinGecko for {coin_id}")
         return df
     except Exception as e:
-        logger.error(f"Failed to fetch data from Bybit: {str(e)}")
+        logger.error(f"CoinGecko error: {str(e)}")
         return None
 
 # ======= HÀM LẤY TÍN HIỆU ICHIMOKU TỪ CLOUDFLARE WORKER ========
@@ -199,19 +249,17 @@ def analyze_market():
     signal_count = 0
     
     for coin in top_coins:
-        symbol = f"{coin}USDT"
+        ssymbol = f"{coin}USDT"
         logger.info(f"======= ANALYZING {symbol} =======")
         
         try:
-            df_4h = fetch_crypto_data(symbol, '4h')
+            # Sử dụng API cá nhân
+            df_4h = fetch_binance_data(symbol, '4h')
             
-            # Kiểm tra dữ liệu đủ
+            # Nếu vẫn lỗi, sử dụng dữ liệu dự phòng từ CoinGecko
             if df_4h is None or len(df_4h) < 100:
-                logger.warning(f"Skipping {symbol}: insufficient data")
-                continue
-                
-            logger.info(f"Data range: {df_4h['timestamp'].iloc[0]} to {df_4h['timestamp'].iloc[-1]}")
-            logger.info(f"Latest close: {df_4h['close'].iloc[-1]}")
+                logger.warning("Falling back to CoinGecko")
+                df_4h = fetch_coingecko_data(coin, '4h')
             
             # ======= TÍNH TOÁN CHỈ BÁO ========
             # RSI
