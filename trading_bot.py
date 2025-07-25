@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client
+import ccxt
 
 # ======= CẤU HÌNH LOGGING CHI TIẾT ========
 log_format = '%(asctime)s - %(levelname)s - %(message)s'
@@ -74,59 +75,46 @@ def test_telegram_connection():
         logger.error(f"Telegram connection failed: {str(e)}")
         return False
 
-# ======= HÀM LẤY DỮ LIỆU TỪ BYBIT ========
-def fetch_crypto_data(symbol, interval='4h', limit=200):
-    """Lấy dữ liệu giá từ Bybit API"""
-    # Bybit không hỗ trợ interval '4h' nên chuyển sang 240 phút
-    bybit_interval = {
-        '1h': '60',
-        '4h': '240',
-        '1d': 'D'
-    }.get(interval, '240')
+# ======= HÀM LẤY DỮ LIỆU TỪ SÀN GIAO DỊCH ========
+def fetch_crypto_data(symbol, interval='4h', limit=100):
+    # Sử dụng CCXT để lấy dữ liệu đa nền tảng
+    exchange = ccxt.binance({
+        'enableRateLimit': True,
+        'options': {
+            'defaultType': 'future',
+            'adjustForTimeDifference': True,
+        },
+        'timeout': 20000
+    })
     
-    url = "https://api.bybit.com/v5/market/kline"
-    params = {
-        'category': 'linear',
-        'symbol': symbol,
-        'interval': bybit_interval,
-        'limit': limit
+    # Chuyển đổi interval sang định dạng CCXT
+    interval_map = {
+        '1m': '1m', '5m': '5m', '15m': '15m',
+        '1h': '1h', '4h': '4h', '1d': '1d'
     }
+    ccxt_interval = interval_map.get(interval, '4h')
     
     try:
-        response = requests.get(url, params=params, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        
-        # Kiểm tra mã lỗi
-        if data.get('retCode') != 0:
-            logger.error(f"Bybit API error: {data.get('retMsg', 'Unknown error')}")
-            return None
-            
-        # Lấy danh sách nến
-        klines = data['result']['list']
-        if not klines:
-            logger.error("Empty data from Bybit API")
+        # Lấy dữ liệu OHLCV
+        ohlcv = exchange.fetch_ohlcv(symbol, ccxt_interval, limit=limit)
+        if not ohlcv:
+            logger.warning(f"No data returned for {symbol}")
             return None
             
         # Tạo DataFrame
-        df = pd.DataFrame(klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume', 
-            'turnover'
-        ])
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         
-        # Sắp xếp theo thời gian tăng dần
-        df = df.iloc[::-1].reset_index(drop=True)
-        
-        # Chuyển đổi kiểu dữ liệu
-        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
-        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, axis=1)
-        df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='ms')
-        
-        logger.info(f"Fetched {len(df)} records for {symbol} ({interval}) from Bybit")
+        logger.info(f"Fetched {len(df)} records for {symbol} ({ccxt_interval})")
         return df
+    except ccxt.NetworkError as e:
+        logger.error(f"Network error: {str(e)}")
+    except ccxt.ExchangeError as e:
+        logger.error(f"Exchange error: {str(e)}")
     except Exception as e:
-        logger.error(f"Failed to fetch data from Bybit: {str(e)}")
-        return None
+        logger.error(f"General error: {str(e)}")
+        
+    return None
 
 # ======= HÀM LẤY TÍN HIỆU ICHIMOKU TỪ CLOUDFLARE WORKER ========
 def get_ichimoku_signal(high, low, close):
@@ -136,12 +124,12 @@ def get_ichimoku_signal(high, low, close):
         return None
     
     # Kiểm tra dữ liệu đầu vào
-    if not high or not low or not close or len(high) < 52:
-        logger.error("Insufficient data for Ichimoku")
+    if not high or not low or not close:
+        logger.error("Invalid data for Ichimoku")
         return None
-    
+        
     data = {
-        "high": high[-100:],  # Chỉ gửi 100 nến gần nhất
+        "high": high[-100:],
         "low": low[-100:],
         "close": close[-100:]
     }
@@ -150,9 +138,19 @@ def get_ichimoku_signal(high, low, close):
         response = requests.post(
             worker_url, 
             json=data,
-            timeout=10  # Timeout sau 10 giây
+            timeout=10
         )
-        response.raise_for_status()
+        
+        # Kiểm tra status code
+        if response.status_code != 200:
+            logger.error(f"Ichimoku API status: {response.status_code}")
+            return None
+            
+        # Kiểm tra nội dung
+        if not response.text.strip():
+            logger.error("Empty response from Ichimoku API")
+            return None
+            
         return response.json().get("signal")
     except Exception as e:
         logger.error(f"Failed to get Ichimoku signal: {str(e)}")
@@ -199,7 +197,7 @@ def analyze_market():
     signal_count = 0
     
     for coin in top_coins:
-        symbol = f"{coin}USDT"
+        symbol = f"{coin}/USDT"  # Định dạng symbol cho CCXT
         logger.info(f"======= ANALYZING {symbol} =======")
         
         try:
@@ -296,7 +294,7 @@ def analyze_market():
                 message = f"""
 🚀 **TÍN HIỆU GIAO DỊCH MỚI** 🚀
 
-🪙 **Coin:** {symbol}
+🪙 **Coin:** {symbol.replace('/', '')}
 📈 **Lệnh:** LONG
  leverage **Đòn bẩy đề xuất:** 5x
 
@@ -350,18 +348,18 @@ if __name__ == "__main__":
         logger.error("Critical: Telegram connection failed. Exiting.")
         exit(1)
     
-    # Test kết nối Bybit API
-    test_df = fetch_crypto_data("BTCUSDT", "4h", 10)
-    if test_df is None or len(test_df) == 0:
-        logger.error("Critical: Bybit API connection failed. Exiting.")
-        send_telegram_alert("⚠️ CRITICAL: Failed to connect to Bybit API")
+    # Test kết nối API
+    test_df = fetch_crypto_data("BTC/USDT", "4h", 10)
+    if test_df is None:
+        logger.error("Critical: Exchange API connection failed. Exiting.")
+        send_telegram_alert("⚠️ CRITICAL: Failed to connect to exchange API")
         exit(1)
     
     # Chạy phân tích thị trường
     try:
         analyze_market()
     except Exception as e:
-        logger.error(f"Unhandled exception in main: {str(e)}", exc_info=True)
-        send_telegram_alert(f"⚠️ CRITICAL ERROR: {str(e)}")
+        logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+        send_telegram_alert(f"⚠️ UNHANDLED EXCEPTION: {str(e)}")
     
     logger.info("====== BOT FINISHED ======")
