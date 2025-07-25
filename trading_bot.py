@@ -75,16 +75,35 @@ def test_telegram_connection():
         return False
 
 # ======= HÀM LẤY DỮ LIỆU TỪ BINANCE ========
-def fetch_crypto_data(symbol, interval='1h', limit=500):
-    url = "https://api.binance.com/api/v3/klines"
+def fetch_crypto_data(symbol, interval='1h', limit=100):  # Giảm limit
+    # Sử dụng endpoint dự phòng
+    url = "https://api1.binance.com/api/v3/klines"
+    
     params = {
         'symbol': symbol,
         'interval': interval,
         'limit': limit
     }
     
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json'
+    }
+    
+    proxy_url = os.getenv("PROXY_URL")
+    proxies = {
+        'http': proxy_url,
+        'https': proxy_url
+    } if proxy_url else None
+    
     try:
-        response = requests.get(url, params=params, timeout=15)
+        response = requests.get(
+            url, 
+            params=params, 
+            headers=headers, 
+            proxies=proxies,
+            timeout=20
+        )
         response.raise_for_status()
         data = response.json()
         
