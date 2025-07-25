@@ -6,6 +6,9 @@ import pandas_ta as ta
 import numpy as np
 import sys
 import logging
+import hmac
+import hashlib
+import urllib.parse
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client
@@ -138,7 +141,7 @@ def test_telegram_connection():
         logger.error(f"Telegram connection failed: {str(e)}")
         return False
 
-# ======= HÀM LẤY DỮ LIỆU TỪ BYBIT ========
+# ======= HÀM LẤY DỮ LIỆU TỪ COINGECKO ========
 def fetch_coingecko_data(coin_id, interval='4h'):
     try:
         # Map coin ID (ví dụ: bitcoin, ethereum)
@@ -249,7 +252,8 @@ def analyze_market():
     signal_count = 0
     
     for coin in top_coins:
-        symbol = f"{coin}USDT"
+        # SỬA LỖI Ở ĐÂY: sử dụng biến symbol thay vì ssymbol
+        symbol = f"{coin}USDT"  # Đổi tên biến thành symbol
         logger.info(f"======= ANALYZING {symbol} =======")
         
         try:
