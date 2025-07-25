@@ -76,8 +76,8 @@ def fetch_binance_data(symbol, interval='1h', limit=500):
             "socks5://82.196.11.105:1080"
         ]
         
-        for proxy_url in PROXY_LIST:
-            try:
+    for proxy_url in PROXY_LIST :
+        try:
                 proxies = {
                     'http': proxy_url,
                     'https': proxy_url
@@ -91,10 +91,10 @@ def fetch_binance_data(symbol, interval='1h', limit=500):
                 )
                 # ... [xử lý response] ...
                 logger.info(f"Thành công với proxy: {proxy_url}")
-                return df
-            except Exception as e:
+            return df
+        except Exception as e:
                 logger.error(f"Lỗi proxy {proxy_url}: {str(e)}")
-                continue
+        continue
         
         logger.error("Tất cả proxy đều thất bại!")
         return None
