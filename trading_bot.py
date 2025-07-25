@@ -75,11 +75,10 @@ def analyze_market():
             df_4h = fetch_crypto_data(symbol, '4h')
             if df_4h is None or len(df_4h) < 100:
                 logging.warning(f"Skipping {symbol}: insufficient data ({len(df_4h) if df_4h else 0} records)")
-                continue
-                
-            logging.info(f"Data range: {df_4h['timestamp'].iloc[0]} to {df_4h['timestamp'].iloc[-1]}")
-            logging.info(f"Latest close: {df_4h['close'].iloc[-1]}")
+            continue
             
+                logging.info(f"Data range: {df_4h['timestamp'].iloc[0]} to {df_4h['timestamp'].iloc[-1]}")
+                logging.info(f"Latest close: {df_4h['close'].iloc[-1]}")
             # Kiểm tra dữ liệu đủ
             if len(df_4h) < 100:
                 continue
@@ -102,11 +101,6 @@ def analyze_market():
             df_4h.ta.ema(length=50, append=True)
             df_4h.ta.ema(length=200, append=True)
             df_4h.ta.adx(length=14, append=True)
-            
-            logging.debug(f"RSI values: {df_4h['rsi'].tail().values}")
-            logging.debug(f"MACD: {df_4h['macd'].iloc[-1]}, Signal: {df_4h['macd_signal'].iloc[-1]}")
-            logging.debug(f"EMA 21: {df_4h['ema21'].iloc[-1]}, EMA 50: {df_4h['ema50'].iloc[-1]}")
-            logging.debug(f"ADX: {df_4h['adx'].iloc[-1]}")
 
             # Xác định tín hiệu
             signals = []
